@@ -14,29 +14,56 @@ const categoryRoute = require("../src/routes/categoryRoutes");
 const guestPostRoute = require("../src/routes/guestPostRoutes");
 
 dotenv.config();
+
 const app = express();
 const server = http.createServer(app);
+
+// ==========================
+// Middlewares
+// ==========================
+app.use(cors({
+  origin: [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://belog-frontend.vercel.app"
+  ],
+  credentials: true
+}));
+app.use(express.json());
+app.use(cookieParser());
 
 // ==========================
 // Socket.IO
 // ==========================
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3000", "http://localhost:5173", "https://task-hive-entrovex.vercel.app"],
+    origin: [
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "https://task-hive-entrovex.vercel.app"
+    ],
     credentials: true
   }
 });
 
 const onlineUsers = new Map();
 
-io.on("connection", socket => {
+io.on("connection", (socket) => {
   console.log("Socket connected:", socket.id);
 
-  socket.on("register", userId => onlineUsers.set(userId, socket.id));
+  socket.on("register", (userId) => {
+    onlineUsers.set(userId, socket.id);
+  });
 
   socket.on("call-user", ({ toUserId, offer, callType }) => {
     const targetSocket = onlineUsers.get(toUserId);
-    if (targetSocket) io.to(targetSocket).emit("incoming-call", { from: socket.id, offer, callType });
+    if (targetSocket) {
+      io.to(targetSocket).emit("incoming-call", {
+        from: socket.id,
+        offer,
+        callType
+      });
+    }
   });
 
   socket.on("accept-call", ({ toSocketId, answer }) => {
@@ -55,21 +82,6 @@ io.on("connection", socket => {
 });
 
 // ==========================
-// Middlewares
-// ==========================
-app.use(cors({
-  origin: ["http://localhost:5173", "http://localhost:3000", "https://belog-frontend.vercel.app"],
-  credentials: true
-}));
-app.use(express.json());
-app.use(cookieParser());
-
-// ==========================
-// DB Connection
-// ==========================
-connectToDB().catch(console.error);
-
-// ==========================
 // Routes
 // ==========================
 app.use("/auth", authRoute);
@@ -80,13 +92,26 @@ app.use("/guest-posts", guestPostRoute);
 // ==========================
 // Root
 // ==========================
-app.get("/", (req, res) => res.json({ message: "Server running with Socket.IO and Blogging API" }));
+app.get("/", (req, res) => {
+  res.json({ message: "Server running with Socket.IO and Blogging API" });
+});
 
 // ==========================
-// Start Server
+// START SERVER (IMPORTANT FIX)
 // ==========================
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
+
+(async () => {
+  try {
+    await connectToDB();   // ✅ PEHLE DB CONNECT
+    server.listen(PORT, () => {
+      console.log(`✅ Server running at http://localhost:${PORT}`);
+    });
+  } catch (error) {
+    console.error("❌ Server start failed:", error);
+    process.exit(1);
+  }
+})();
 
 module.exports = app;
-module.exports.config = { runtime: 'nodejs18' };
+module.exports.config = { runtime: "nodejs18" };
